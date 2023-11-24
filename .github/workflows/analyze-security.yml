@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-name: CodeGuru Reviewer
+name: CodeGuru Security Scan
 
 on:
   # On-demand analysis via "Run workflow" button.
@@ -43,24 +43,21 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Create empty directory for build artifacts
-      run: mkdir -p build/libs
-
-    - name: Run CodeGuru Reviewer
+    - name: CodeGuru Security
       id: analysis
-      uses: aws-actions/codeguru-reviewer@v1.1
+      uses: aws-actions/codeguru-security@v1
       if: steps.assume-iam-role.outcome == 'success'
-      continue-on-error: false
       with:
-        s3_bucket: ${{ secrets.AWS_S3_BUCKET }}
-        build_path: ./src/
+        source_path: .
+        aws_region: ${{ secrets.AWS_REGION }}
+        # fail_on_severity: https://github.com/aws-actions/codeguru-security/blob/main/action.yml#L21
 
     - name: Upload SARIF file to workflow artifacts
       if: steps.assume-iam-role.outcome == 'success' && steps.analysis.outcome == 'success'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
-        name: codeguru-results.sarif.json
-        path: codeguru-results.sarif.json
+        name: codeguru-security-results.sarif.json
+        path: codeguru-security-results.sarif.json
 
     #
     # Upload the SARIF analysis results to GitHub so that they appear on the GitHub UX.
@@ -72,7 +69,7 @@ jobs:
       if: steps.assume-iam-role.outcome == 'success' && steps.analysis.outcome == 'success'
       uses: github/codeql-action/upload-sarif@v2
       with:
-        sarif_file: codeguru-results.sarif.json
+        sarif_file: codeguru-security-results.sarif.json
 
     #
     # The following steps are optional.
@@ -90,7 +87,7 @@ jobs:
       run: |
         echo "detector,filePath,lineNumber" > summary-of-results.csv
         jq -r '.runs[0].results[] | {ruleId: .ruleId, firstFile: .locations[0].physicalLocation.artifactLocation.uri, firstLine: .locations[0].physicalLocation.region.startLine} | join(",")' \
-          codeguru-results.sarif.json | sort >> summary-of-results.csv
+          codeguru-security-results.sarif.json | sort >> summary-of-results.csv
 
     - name: Upload results summary to workflow artifacts
       if: steps.assume-iam-role.outcome == 'success' && steps.analysis.outcome == 'success'
